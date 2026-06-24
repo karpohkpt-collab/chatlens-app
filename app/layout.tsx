@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "vibe-stack-supabase",
-  description: "Next.js + Supabase starter",
+  title: "ChatLens",
+  description: "Turn chat exports into a searchable, AI-summarized digest.",
 };
 
 export default function RootLayout({
