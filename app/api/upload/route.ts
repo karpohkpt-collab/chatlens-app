@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { parseWhatsApp } from "@/lib/parsers/whatsapp";
 import { parseTelegram } from "@/lib/parsers/telegram";
 import { extractHighlights } from "@/lib/highlights/extract";
+import { summarizeAndStore } from "@/lib/ai/summarize";
 import { logAudit } from "@/lib/audit";
 import type { Platform } from "@/lib/types";
 import { NextResponse } from "next/server";
@@ -123,6 +124,9 @@ export async function POST(request: Request) {
       highlight_count: highlightInputs.length,
       platform,
     });
+
+    // AI summary is additive — upload + highlights already work without it.
+    await summarizeAndStore(supabase, upload.id);
 
     return NextResponse.json({ uploadId: upload.id, messageCount: insertedMessages.length });
   } catch (err) {
