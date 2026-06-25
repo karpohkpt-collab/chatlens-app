@@ -2,7 +2,32 @@
 
 import { useState } from "react";
 import type { ChatUpload, Highlight, ParsedMessage } from "@/lib/types";
-import { HIGHLIGHT_TYPE_LABELS, HIGHLIGHT_TYPE_ORDER, groupByType, rankHighlights } from "@/lib/digest";
+import {
+  FREE_PREVIEW_LIMIT,
+  HIGHLIGHT_TYPE_LABELS,
+  HIGHLIGHT_TYPE_ORDER,
+  groupByType,
+  rankHighlights,
+} from "@/lib/digest";
+
+function downloadHighlightsCsv(filename: string, highlights: Highlight[]) {
+  const header = ["type", "value", "source", "confidence", "review_status"];
+  const rows = highlights.map((h) => [
+    h.highlight_type,
+    `"${h.value.replace(/"/g, '""')}"`,
+    h.value_source ?? "",
+    String(h.value_confidence ?? ""),
+    h.value_review_status,
+  ]);
+  const csv = [header.join(","), ...rows.map((r) => r.join(","))].join("\n");
+  const blob = new Blob([csv], { type: "text/csv" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `${filename.replace(/\.[^/.]+$/, "")}-digest.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
 
 const TYPE_ICON: Record<string, string> = {
   date: "📅",
@@ -22,11 +47,37 @@ export function DigestView({
   highlights: Highlight[];
 }) {
   const [activeMessageId, setActiveMessageId] = useState<string | null>(null);
+  const [isCheckingOut, setIsCheckingOut] = useState(false);
+  const [checkoutError, setCheckoutError] = useState<string | null>(null);
   const messageById = new Map(messages.map((m) => [m.id, m]));
   const activeMessage = activeMessageId ? messageById.get(activeMessageId) : null;
 
   const ranked = rankHighlights(highlights);
   const grouped = groupByType(ranked);
+  const freeIds = new Set(ranked.slice(0, FREE_PREVIEW_LIMIT).map((h) => h.id));
+  const hasLockedHighlights = !upload.paid && ranked.length > FREE_PREVIEW_LIMIT;
+
+  async function handleUnlock() {
+    setIsCheckingOut(true);
+    setCheckoutError(null);
+    try {
+      const res = await fetch("/api/checkout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ uploadId: upload.id }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.url) {
+        setCheckoutError(data.error ?? "Checkout failed — please try again.");
+        setIsCheckingOut(false);
+        return;
+      }
+      window.location.href = data.url;
+    } catch {
+      setCheckoutError("Checkout failed — please try again.");
+      setIsCheckingOut(false);
+    }
+  }
 
   if (upload.message_count === 0) {
     return (
@@ -76,22 +127,66 @@ export function DigestView({
                 {TYPE_ICON[type]} {HIGHLIGHT_TYPE_LABELS[type]}
               </h3>
               <div className="grid gap-2">
-                {grouped[type].map((highlight) => (
-                  <button
-                    key={highlight.id}
-                    onClick={() => setActiveMessageId(highlight.message_id)}
-                    className="text-left rounded-lg border border-neutral-200 p-3 hover:border-neutral-400 transition-colors bg-white"
-                  >
-                    <p className="text-sm text-neutral-900">{highlight.value}</p>
-                    <p className="text-xs text-neutral-400 mt-1">
-                      {highlight.value_source} · {Math.round((highlight.value_confidence ?? 0) * 100)}%
-                      confidence
-                    </p>
-                  </button>
-                ))}
+                {grouped[type].map((highlight) => {
+                  const isLocked = !upload.paid && !freeIds.has(highlight.id);
+                  if (isLocked) {
+                    return (
+                      <div
+                        key={highlight.id}
+                        className="rounded-lg border border-neutral-200 p-3 bg-white select-none"
+                      >
+                        <p className="text-sm text-neutral-900 blur-sm">{highlight.value}</p>
+                        <p className="text-xs text-neutral-400 mt-1 blur-sm">
+                          {highlight.value_source} · confidence
+                        </p>
+                      </div>
+                    );
+                  }
+                  return (
+                    <button
+                      key={highlight.id}
+                      onClick={() => setActiveMessageId(highlight.message_id)}
+                      className="text-left rounded-lg border border-neutral-200 p-3 hover:border-neutral-400 transition-colors bg-white"
+                    >
+                      <p className="text-sm text-neutral-900">{highlight.value}</p>
+                      <p className="text-xs text-neutral-400 mt-1">
+                        {highlight.value_source} · {Math.round((highlight.value_confidence ?? 0) * 100)}%
+                        confidence
+                      </p>
+                    </button>
+                  );
+                })}
               </div>
             </section>
           ))}
+        </div>
+      )}
+
+      {hasLockedHighlights && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-center space-y-2">
+          <p className="text-sm text-amber-900">
+            Showing {FREE_PREVIEW_LIMIT} of {ranked.length} highlights. Unlock the full digest to see
+            the rest.
+          </p>
+          <button
+            onClick={handleUnlock}
+            disabled={isCheckingOut}
+            className="rounded-md bg-amber-600 px-4 py-2 text-sm font-medium text-white hover:bg-amber-700 disabled:opacity-60"
+          >
+            {isCheckingOut ? "Redirecting to checkout…" : "Unlock full digest — $9"}
+          </button>
+          {checkoutError && <p className="text-xs text-red-600">{checkoutError}</p>}
+        </div>
+      )}
+
+      {upload.paid && (
+        <div className="flex justify-end">
+          <button
+            onClick={() => downloadHighlightsCsv(upload.filename, ranked)}
+            className="rounded-md border border-neutral-300 px-4 py-2 text-sm font-medium hover:border-neutral-500"
+          >
+            Download CSV
+          </button>
         </div>
       )}
 
