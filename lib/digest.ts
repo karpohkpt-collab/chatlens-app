@@ -16,8 +16,6 @@ export const HIGHLIGHT_TYPE_LABELS: Record<HighlightType, string> = {
   action_item: "Action Items",
 };
 
-export const FREE_PREVIEW_LIMIT = 5;
-
 export function rankHighlights(highlights: Highlight[]): Highlight[] {
   return [...highlights].sort((a, b) => {
     if (a.is_pinned !== b.is_pinned) return a.is_pinned ? -1 : 1;

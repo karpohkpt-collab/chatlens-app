@@ -3,7 +3,6 @@
 import { useState } from "react";
 import type { ChatUpload, Highlight, ParsedMessage } from "@/lib/types";
 import {
-  FREE_PREVIEW_LIMIT,
   HIGHLIGHT_TYPE_LABELS,
   HIGHLIGHT_TYPE_ORDER,
   groupByType,
@@ -54,8 +53,6 @@ export function DigestView({
 
   const ranked = rankHighlights(highlights);
   const grouped = groupByType(ranked);
-  const freeIds = new Set(ranked.slice(0, FREE_PREVIEW_LIMIT).map((h) => h.id));
-  const hasLockedHighlights = !upload.paid && ranked.length > FREE_PREVIEW_LIMIT;
 
   async function handleUnlock() {
     setIsCheckingOut(true);
@@ -128,20 +125,6 @@ export function DigestView({
               </h3>
               <div className="grid gap-2">
                 {grouped[type].map((highlight) => {
-                  const isLocked = !upload.paid && !freeIds.has(highlight.id);
-                  if (isLocked) {
-                    return (
-                      <div
-                        key={highlight.id}
-                        className="rounded-lg border border-neutral-200 p-3 bg-white select-none"
-                      >
-                        <p className="text-sm text-neutral-900 blur-sm">{highlight.value}</p>
-                        <p className="text-xs text-neutral-400 mt-1 blur-sm">
-                          {highlight.value_source} · confidence
-                        </p>
-                      </div>
-                    );
-                  }
                   return (
                     <button
                       key={highlight.id}
@@ -162,18 +145,17 @@ export function DigestView({
         </div>
       )}
 
-      {hasLockedHighlights && (
+      {!upload.paid && ranked.length > 0 && (
         <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-center space-y-2">
           <p className="text-sm text-amber-900">
-            Showing {FREE_PREVIEW_LIMIT} of {ranked.length} highlights. Unlock the full digest to see
-            the rest.
+            Want this digest as a CSV you can keep and share?
           </p>
           <button
             onClick={handleUnlock}
             disabled={isCheckingOut}
             className="rounded-md bg-amber-600 px-4 py-2 text-sm font-medium text-white hover:bg-amber-700 disabled:opacity-60"
           >
-            {isCheckingOut ? "Redirecting to checkout…" : "Unlock full digest — $9"}
+            {isCheckingOut ? "Redirecting to checkout…" : "Unlock CSV download — $9"}
           </button>
           {checkoutError && <p className="text-xs text-red-600">{checkoutError}</p>}
         </div>
